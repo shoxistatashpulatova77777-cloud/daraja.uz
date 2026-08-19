@@ -1,1 +1,1 @@
-# daraja.uz
+# daraja-uz
