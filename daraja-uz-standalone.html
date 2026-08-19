@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daraja.uz — Ingliz tili darajangizni aniqlang</title>
+<meta name="description" content="Milliy sertifikat va IELTS formatida ingliz tili darajangizni bepul aniqlang — Reading, Listening, Writing, Speaking." />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useRef, useEffect } = React;
+
+/* ---------- localStorage shim so the code below (written for Claude's
+   window.storage API) works unchanged on a normal deployed website ---------- */
+window.storage = {
+  async get(key, shared) {
+    const v = localStorage.getItem((shared ? "shared:" : "personal:") + key);
+    if (v === null) throw new Error("not found");
+    return { key, value: v, shared };
+  },
+  async set(key, value, shared) {
+    localStorage.setItem((shared ? "shared:" : "personal:") + key, value);
+    return { key, value, shared };
+  },
+  async delete(key, shared) {
+    localStorage.removeItem((shared ? "shared:" : "personal:") + key);
+    return { key, deleted: true, shared };
+  },
+  async list(prefix, shared) {
+    const p = (shared ? "shared:" : "personal:") + (prefix || "");
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(p)) keys.push(k.slice((shared ? "shared:" : "personal:").length));
+    }
+    return { keys, prefix, shared };
+  },
+};
+
+
+/* ---------- Palette & type tokens ---------- */
+const COLORS = {
+  navy: "#152238",
+  navyLight: "#233252",
+  parchment: "#F7F2E7",
+  parchmentDark: "#EDE4D0",
+  gold: "#C7972C",
+  goldLight: "#E3BE6B",
+  teal: "#1F5C56",
+  red: "#A3402F",
+  green: "#2E6B4F",
+};
+const SERIF = 'Georgia, "Times New Roman", serif';
+const SANS = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+
+const MONTHS = ["Yanvar","Fevral","Mart","Aprel","May","Iyun","Iyul","Avgust","Sentabr","Oktabr","Noyabr","Dekabr"];
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 45 }, (_, i) => CURRENT_YEAR - 5 - i);
+
+/* ---------- Built-in topic bundles (fallback + first-pass variety) ---------- */
+
+const TOPIC_BUNDLES = [
+  {
+    id: "animals",
+    topicLabel: "Hayvonot olami",
+    reading: {
+      passage: `Every winter, thousands of birds called Siberian cranes travel more than four thousand kilometres to reach warmer wetlands. Scientists have followed their journey for decades, attaching small trackers to a few birds each year. What surprised researchers most was not the distance, but the timing: the cranes leave within the same three-day window every year, almost as if they share a calendar. Local farmers near the wetlands have learned to expect them, and some even delay harvesting certain fields so the birds have enough food when they arrive tired and hungry.`,
+      questions: [
+        { q: "How far do the cranes typically travel?", options: ["About 400 km","More than 4,000 km","Around 40 km","It is not mentioned"], correct: 1 },
+        { q: "What surprised the researchers the most?", options: ["How strong the birds are","The number of birds that survive","How consistent the timing of departure is","The size of the trackers"], correct: 2 },
+        { q: "What do some local farmers do?", options: ["They catch the birds","They delay harvesting some fields","They feed the birds by hand","They track the birds themselves"], correct: 1 },
+        { q: "Why do the birds need food when they arrive?", options: ["They are tired and hungry after the journey","They are preparing for winter","They are feeding their young","The passage does not say"], correct: 0 },
+      ],
+    },
+    listening: {
+      passage: `Good morning, everyone. Before we start today's tour, I want to explain how the group will move through the museum. We will begin on the ground floor with the pottery collection, then take the east staircase up to the second floor for the paintings. Please stay close to the group, because some rooms will close for cleaning at exactly eleven o'clock. If you get separated, meet at the main entrance, not the gift shop. Photography is allowed everywhere except the small room at the end of the second floor, where the lighting is very sensitive.`,
+      questions: [
+        { q: "Where does the group start the tour?", options: ["Second floor","Ground floor","Gift shop","East staircase"], correct: 1 },
+        { q: "At what time will some rooms close for cleaning?", options: ["Ten o'clock","Twelve o'clock","Eleven o'clock","Nine o'clock"], correct: 2 },
+        { q: "Where should people meet if they get separated?", options: ["The gift shop","The east staircase","The pottery room","The main entrance"], correct: 3 },
+        { q: "Where is photography NOT allowed?", options: ["The ground floor","The small room at the end of the second floor","The main entrance","The east staircase"], correct: 1 },
+      ],
+    },
+    writingTask: {
+      cefr: "Do'stingizga xat yozing va yaqinda boshingizdan o'tgan bir sayohatda yuzaga kelgan muammo haqida so'zlab bering: qayerga bordingiz, nima muammo bo'ldi, uni qanday hal qildingiz va hozir bu haqda o'zingizni qanday his qilayotganingizni yozing. Kamida 120 so'z, informal uslubda yozing.",
+      ielts: "Write a letter to a friend describing a problem you experienced during a recent trip. Mention where you went, what went wrong, how you solved it, and how you feel about it now. Write at least 150 words, in an informal style.",
+    },
+    speakingTask: {
+      cefr: "O'zingiz yashayotgan shahar yoki qishlog'ingiz haqida gapirib bering — u yerda nima yoqadi, nima o'zgartirishni istardingiz. Kamida 45 soniya gapiring.",
+      ielts: "Describe the city or town where you live. Talk about what you like about it and what you would change. Speak for at least 45 seconds.",
+    },
+  },
+  {
+    id: "technology",
+    topicLabel: "Texnologiya",
+    reading: {
+      passage: `A small village in the mountains had no reliable internet for years, so students often struggled to finish online homework. Last spring, a company installed a satellite dish on the roof of the local school, and within a week, every classroom had a stable connection. Teachers noticed an unexpected result: parents began coming to the school in the evenings to video-call relatives working abroad. The head teacher decided to keep the building open two extra hours each evening, and now the school has become a small community hub, not just a place for lessons.`,
+      questions: [
+        { q: "What problem did the village have for years?", options: ["No electricity","No reliable internet","No school building","No teachers"], correct: 1 },
+        { q: "Where was the satellite dish installed?", options: ["On a mountain","On the school roof","In the village center","At each house"], correct: 1 },
+        { q: "What unexpected thing did parents start doing?", options: ["Teaching classes","Coming to video-call relatives abroad","Fixing the internet","Building new classrooms"], correct: 1 },
+        { q: "What did the head teacher decide to do?", options: ["Close the school earlier","Keep the school open two extra hours","Charge for internet use","Move the dish elsewhere"], correct: 1 },
+      ],
+    },
+    listening: {
+      passage: `Attention, staff: starting Monday, our accounting software will be updated to a new version. Please save and close all your files before you leave on Friday evening, because the system will be unavailable during the update. If you have any documents you were still working on, export them as PDF first, just to be safe. The IT team will be in the main office from eight to ten on Monday morning to help anyone who has trouble logging in. After that, please send any questions by email instead of calling, since the team will be very busy with other departments.`,
+      questions: [
+        { q: "When will the software be updated?", options: ["This weekend","Starting Monday","Every Friday","Next month"], correct: 1 },
+        { q: "What should staff do before leaving Friday?", options: ["Update their password","Save and close all files","Print their documents","Turn off their computers"], correct: 1 },
+        { q: "Where will the IT team be on Monday morning?", options: ["In the main office","At home","In another building","Nowhere, they are off"], correct: 0 },
+        { q: "How should staff contact IT after Monday morning?", options: ["By phone","By email","In person only","Through their manager"], correct: 1 },
+      ],
+    },
+    writingTask: {
+      cefr: "Do'stingizga xat yozing: yaqinda biror texnika (telefon, noutbuk va h.k.) bilan bog'liq muammo yuz berganini va uni qanday hal qilganingizni yozing. Kamida 120 so'z, informal uslubda yozing.",
+      ielts: "Write a letter to a friend about a problem you had with a piece of technology recently and how you solved it. Write at least 150 words, in an informal style.",
+    },
+    speakingTask: {
+      cefr: "Har kuni foydalanadigan biror texnologiya (telefon, ilova va h.k.) haqida gapiring — u nima uchun foydali va uni qanday yaxshilagan bo'lardingiz. Kamida 45 soniya gapiring.",
+      ielts: "Describe a piece of technology you use every day. Talk about why it is useful and what you would improve about it. Speak for at least 45 seconds.",
+    },
+  },
+  {
+    id: "health",
+    topicLabel: "Sog'lom turmush tarzi",
+    reading: {
+      passage: `Researchers studying sleep recently followed two hundred office workers for a month, asking them to note down their bedtime, screen use, and how alert they felt the next day. People who stopped using screens at least thirty minutes before sleeping reported waking up feeling noticeably more rested, even when they slept the same number of hours as everyone else. Interestingly, the effect was strongest among people who normally slept less than seven hours a night. The researchers now plan a larger study to see whether small changes like this could reduce the need for caffeine during the day.`,
+      questions: [
+        { q: "Who took part in the study?", options: ["Students","Office workers","Doctors","Athletes"], correct: 1 },
+        { q: "What did participants have to record?", options: ["Their diet","Bedtime, screen use, and alertness","Their exercise routine","Their working hours"], correct: 1 },
+        { q: "Who felt the strongest effect from avoiding screens?", options: ["People who slept more than 9 hours","People who slept less than 7 hours","People who exercised daily","People who drank coffee"], correct: 1 },
+        { q: "What do the researchers plan next?", options: ["Stop the study","A larger study","A study about diet","A study about exercise"], correct: 1 },
+      ],
+    },
+    listening: {
+      passage: `Okay everyone, welcome to your first session. Before we begin, a few quick rules. Please bring your own water bottle, since the gym doesn't provide cups anymore. If you feel dizzy or unwell at any point, stop immediately and sit down — don't try to push through it. We'll start with a ten-minute warm-up, then move to the main exercises, and finish with stretching. Lockers are free, but you'll need a coin for the key, so bring some change. And please wipe down the equipment after you use it, out of respect for the next person.`,
+      questions: [
+        { q: "What should participants bring themselves?", options: ["A towel","A water bottle","Their own equipment","A mat"], correct: 1 },
+        { q: "What should someone do if they feel dizzy?", options: ["Keep exercising slowly","Stop and sit down","Leave the gym","Drink water and continue"], correct: 1 },
+        { q: "What comes after the warm-up?", options: ["Stretching","The main exercises","A break","Locker time"], correct: 1 },
+        { q: "What do people need for the lockers?", options: ["A key card","A coin","A password","Nothing, they are free"], correct: 1 },
+      ],
+    },
+    writingTask: {
+      cefr: "Do'stingizga xat yozing: sayohatda yoki safarda kasal bo'lib qolganingiz va bu muammoni qanday hal qilganingiz haqida yozing. Kamida 120 so'z, informal uslubda yozing.",
+      ielts: "Write a letter to a friend about a time you got sick during a trip and how you dealt with it. Write at least 150 words, in an informal style.",
+    },
+    speakingTask: {
+      cefr: "Sog'lom turmush tarzi bo'yicha bitta odatingiz haqida gapiring — nega uni saqlashga harakat qilasiz yoki nega orttirishni istaysiz. Kamida 45 soniya gapiring.",
+      ielts: "Talk about a healthy habit you have, or one you would like to develop. Explain why it matters to you. Speak for at least 45 seconds.",
+    },
+  },
+  {
+    id: "education",
+    topicLabel: "Ta'lim",
+    reading: {
+      passage: `A university in the north began offering a one-semester exchange with a partner college overseas, and the first group of ten students returned last month. Most of them said the biggest challenge wasn't the coursework, but everyday things like opening a bank account or understanding public transport. To help future students, the exchange office asked the returning group to write a short guide covering these practical details. The guide became so popular that two other departments have asked to adapt it for their own exchange programmes, even though it was never intended to be an official document.`,
+      questions: [
+        { q: "What did the university start offering?", options: ["A new degree","A one-semester exchange programme","Free tuition","Online classes only"], correct: 1 },
+        { q: "What did most students find the biggest challenge?", options: ["The coursework","Everyday practical things","Making friends","The weather"], correct: 1 },
+        { q: "What were returning students asked to do?", options: ["Give a lecture","Write a short guide","Interview new students","Design a course"], correct: 1 },
+        { q: "What happened to the guide?", options: ["It was ignored","Other departments wanted to adapt it","It was rejected","It became a paid course"], correct: 1 },
+      ],
+    },
+    listening: {
+      passage: `Just a quick announcement before you leave today. The final exam originally scheduled for the fifteenth has been moved forward to the twelfth, because the main hall will be used for another event that week. Please check the updated timetable on the noticeboard, not the one you were given at the start of term. If this new date creates a serious problem for you, for example a clash with another exam, come and see me in my office before Friday so we can discuss it. Otherwise, please treat the twelfth as the confirmed date.`,
+      questions: [
+        { q: "Why was the exam date changed?", options: ["The teacher is unavailable","The hall will be used for another event","Not enough students registered","The exam was cancelled"], correct: 1 },
+        { q: "Where should students check the new date?", options: ["Their email","The noticeboard","The original timetable","The library"], correct: 1 },
+        { q: "What should students with a clash do?", options: ["Ignore it","See the teacher before Friday","Skip the exam","Ask a classmate"], correct: 1 },
+        { q: "What is the new exam date?", options: ["The 15th","The 12th","The 20th","Not mentioned"], correct: 1 },
+      ],
+    },
+    writingTask: {
+      cefr: "Do'stingizga xat yozing: imtihon yoki o'quv safari paytida yuzaga kelgan bir muammo va uni qanday hal qilganingiz haqida yozing. Kamida 120 so'z, informal uslubda yozing.",
+      ielts: "Write a letter to a friend about a problem that happened during an exam period or a study trip, and how you solved it. Write at least 150 words, in an informal style.",
+    },
+    speakingTask: {
+      cefr: "Eng yoqtirgan faningiz yoki mutaxassisligingiz haqida gapiring — nima uchun uni yoqtirasiz. Kamida 45 soniya gapiring.",
+      ielts: "Talk about your favourite subject at school or university and explain why you enjoy it. Speak for at least 45 seconds.",
+    },
+  },
+  {
+    id: "travel-logistics",
+    topicLabel: "Sayohat va tashish",
+    reading: {
+      passage: `A woman travelling to a family wedding almost missed her connecting flight when her train was delayed by nearly an hour outside the city. She arrived at the airport with only twenty minutes before boarding closed, and the check-in desk had already stopped accepting passengers for her original flight. Instead of panicking, she went straight to the airline's help desk, explained the situation, and showed her train ticket as proof of the delay. The staff member found her a seat on a later flight the same evening, free of charge, since the airline had a policy for passengers affected by public transport delays.`,
+      questions: [
+        { q: "Why did the woman almost miss her flight?", options: ["She woke up late", "Her train was delayed", "She lost her ticket", "The airport was closed"], correct: 1 },
+        { q: "What did she do when she arrived at the airport?", options: ["She went home", "She went to the help desk", "She waited in line silently", "She bought a new ticket"], correct: 1 },
+        { q: "What did she show as proof of the delay?", options: ["A photo", "Her train ticket", "A doctor's note", "Nothing"], correct: 1 },
+        { q: "What did the airline do for her?", options: ["Charged her extra", "Cancelled her trip", "Gave her a free later flight", "Refused to help"], correct: 2 },
+      ],
+    },
+    listening: {
+      passage: `Attention, passengers travelling to Istanbul on flight TK-412: your gate has been changed from gate fourteen to gate twenty-two, due to a technical issue with the original aircraft. Boarding will now begin twenty minutes later than originally planned, at six-fifteen. Passengers who need extra assistance are asked to go to the new gate immediately, so our staff can help you first. For everyone else, please remain in the main waiting area until your boarding group is called. We apologise for the inconvenience and thank you for your patience.`,
+      questions: [
+        { q: "Why was the gate changed?", options: ["Due to a technical issue with the aircraft", "Due to bad weather", "Due to a security check", "Due to overbooking"], correct: 0 },
+        { q: "What is the new gate number?", options: ["14", "22", "41", "12"], correct: 1 },
+        { q: "How much later will boarding start?", options: ["10 minutes later", "20 minutes later", "30 minutes later", "On time"], correct: 1 },
+        { q: "Who should go to the new gate immediately?", options: ["Passengers needing extra assistance", "Business class passengers", "Passengers with pets", "Passengers without luggage"], correct: 0 },
+      ],
+    },
+    writingTask: {
+      cefr: "Do'stingizga xat yozing: sayohatingiz davomida transport bilan bog'liq muammo (parvoz kechikishi, poyezdni sog'inib qolish va h.k.) yuz berganini va uni qanday hal qilganingizni yozing. Kamida 120 so'z, informal uslubda yozing.",
+      ielts: "Write a letter to a friend about a transport-related problem you had during a trip (a delayed flight, missing a train, etc.) and how you solved it. Write at least 150 words, in an informal style.",
+    },
+    speakingTask: {
+      cefr: "Yaqinda amalga oshirgan bir sayohatingiz haqida gapiring — qayerga bordingiz va nima uni yodda qoladigan qildi. Kamida 45 soniya gapiring.",
+      ielts: "Talk about a recent trip you took. Describe where you went and what made it memorable. Speak for at least 45 seconds.",
+    },
+  },
+  {
+    id: "workplace",
+    topicLabel: "Ish joyi",
+    reading: {
+      passage: `A logistics company allowed half of its office staff to work from home for three months as an experiment. Managers expected productivity to drop slightly, but internal reports showed the opposite: task completion rates rose by twelve percent, and fewer employees called in sick. However, several younger staff members said they missed the casual conversations that used to happen near the coffee machine, and felt slower to learn from more experienced colleagues. Based on this mixed result, the company decided on a compromise: employees can work from home two days a week, but must come to the office for the other three.`,
+      questions: [
+        { q: "What did managers expect before the trial?", options: ["Productivity to rise a lot", "Productivity to drop slightly", "No change at all", "Employees to quit"], correct: 1 },
+        { q: "What actually happened to task completion rates?", options: ["They fell by 12%", "They stayed the same", "They rose by 12%", "They could not be measured"], correct: 2 },
+        { q: "What did younger staff say they missed?", options: ["Their desks", "Casual office conversations", "Free coffee", "Paper documents"], correct: 1 },
+        { q: "What compromise did the company choose?", options: ["Fully remote work", "Two days home, three days office", "No remote work at all", "Remote work only for managers"], correct: 1 },
+      ],
+    },
+    listening: {
+      passage: `Before you start your shift today, please note a small change to the delivery schedule. Trucks will now arrive at the back entrance between seven and eight in the morning instead of nine, so the loading team needs to be ready earlier. If you're on the morning shift, please clock in by six-forty-five so we have time for a short briefing. Also, remember that the north parking area is closed this week for repairs, so please park in the south lot and allow a few extra minutes to walk over. Thanks for your flexibility.`,
+      questions: [
+        { q: "When will trucks now arrive?", options: ["6-7 AM", "7-8 AM", "8-9 AM", "9-10 AM"], correct: 1 },
+        { q: "What time should morning shift workers clock in?", options: ["6:30", "6:45", "7:00", "7:15"], correct: 1 },
+        { q: "Why is the north parking area closed?", options: ["It's being repaired", "It's reserved for trucks", "It's flooded", "It's being repainted"], correct: 0 },
+        { q: "Where should employees park instead?", options: ["North lot", "East lot", "South lot", "On the street"], correct: 2 },
+      ],
+    },
+    writingTask: {
+      cefr: "Do'stingizga xat yozing: ish yoki amaliyot joyida yuzaga kelgan bir muammo va uni qanday hal qilganingiz haqida yozing. Kamida 120 so'z, informal uslubda yozing.",
+      ielts: "Write a letter to a friend about a problem you had at work or during an internship, and how you dealt with it. Write at least 150 words, in an informal style.",
+    },
+    speakingTask: {
+      cefr: "Kelajakda qanday kasb egallashni yoki qayerda ishlashni xohlaysiz? Nega, tushuntiring. Kamida 45 soniya gapiring.",
+      ielts: "Talk about the kind of job or career you would like to have in the future, and explain why. Speak for at least 45 seconds.",
+    },
+  },
+  {
+    id: "university-life",
+    topicLabel: "Talabalik hayoti",
+    reading: {
+      passage: `A group of second-year students decided to organise a small charity book sale to raise money for a children's hospital. At first, they expected maybe thirty or forty people to attend, so they only printed a handful of flyers. To their surprise, more than two hundred students showed up after the event was shared on social media, and they sold almost every book within two hours. The group raised far more money than expected, but they also ran out of change for cash payments, which caused a long queue. Next time, they plan to use a mobile payment app instead.`,
+      questions: [
+        { q: "What was the charity event?", options: ["A concert", "A book sale", "A sports match", "A bake sale"], correct: 1 },
+        { q: "How many people did they originally expect?", options: ["10-20", "30-40", "100-150", "200+"], correct: 1 },
+        { q: "Why was there a long queue?", options: ["Not enough books", "Not enough change for cash", "The venue was too small", "Bad weather"], correct: 1 },
+        { q: "What will they do differently next time?", options: ["Cancel the event", "Use a mobile payment app", "Sell fewer books", "Not use social media"], correct: 1 },
+      ],
+    },
+    listening: {
+      passage: `A reminder for all first-year students: the deadline to submit your course selection form is this Friday, not next Monday as some of you may have heard. Forms must be submitted online through the student portal, not by email. If you're unsure which courses to choose, academic advisors are available in room two-oh-five every afternoon this week, no appointment needed. Students who miss the deadline will be automatically placed in the standard course package, which cannot be changed until next semester.`,
+      questions: [
+        { q: "When is the real deadline?", options: ["Next Monday", "This Friday", "This Wednesday", "Next Friday"], correct: 1 },
+        { q: "How should forms be submitted?", options: ["By email", "Through the student portal", "In person", "By phone"], correct: 1 },
+        { q: "Where can students get advice?", options: ["Room 105", "Room 205", "Room 305", "The library"], correct: 1 },
+        { q: "What happens if a student misses the deadline?", options: ["They are expelled", "They get the standard course package", "They must repeat the year", "Nothing happens"], correct: 1 },
+      ],
+    },
+    writingTask: {
+      cefr: "Do'stingizga xat yozing: universitet yoki maktabda tashkil qilingan bir tadbir (klub, sayohat, tanlov) haqida va u qanday o'tganini yozing. Kamida 120 so'z, informal uslubda yozing.",
+      ielts: "Write a letter to a friend about an event you helped organise or took part in at your school or university. Write at least 150 words, in an informal style.",
+    },
+    speakingTask: {
+      cefr: "Universitet yoki maktabdagi klub faoliyatlari haqida gapiring — qatnashganmisiz, nega ha yoki yo'q. Kamida 45 soniya gapiring.",
+      ielts: "Talk about clubs or extracurricular activities at your school or university. Have you taken part in any, and why or why not? Speak for at least 45 seconds.",
+    },
+  },
+  {
+    id: "hospitality",
+    topicLabel: "Mehmondo'stlik xizmati",
+    reading: {
+      passage: `A small family restaurant noticed that several dishes on its menu were rarely ordered, while customers kept asking for a few items that weren't offered at all. Instead of guessing, the owners placed a short feedback card on every table for a month, asking diners what they'd like to see added or removed. The results were clear: most people wanted more vegetarian options and smaller portion sizes for lunch. The restaurant redesigned its menu based on this feedback, removing three unpopular dishes and adding five new ones. Within two months, lunch sales had increased noticeably.`,
+      questions: [
+        { q: "What did the restaurant do to get feedback?", options: ["Called customers", "Placed feedback cards on tables", "Hired a consultant", "Checked online reviews only"], correct: 1 },
+        { q: "What did most customers want?", options: ["Cheaper drinks", "More vegetarian options and smaller lunch portions", "Later opening hours", "Live music"], correct: 1 },
+        { q: "What happened to lunch sales after the change?", options: ["They decreased", "They stayed the same", "They increased noticeably", "They disappeared"], correct: 2 },
+        { q: "What do the owners plan to do now?", options: ["Stop asking for feedback", "Repeat the survey every six months", "Close for renovations", "Raise all prices"], correct: 1 },
+      ],
+    },
+    listening: {
+      passage: `Just to let everyone know, our kitchen will be closing thirty minutes earlier tonight, at nine instead of nine-thirty, because two of our chefs finish early for a family event. If you'd like to order food, please do so before eight-forty-five to make sure it reaches the kitchen in time. The bar, however, will stay open as usual until eleven. We're sorry for any inconvenience, and we'll be back to our normal schedule again tomorrow.`,
+      questions: [
+        { q: "What time will the kitchen close tonight?", options: ["8:30", "9:00", "9:30", "10:00"], correct: 1 },
+        { q: "Why is it closing early?", options: ["Not enough customers", "Two chefs need to leave early for a family event", "The kitchen is broken", "It's a public holiday"], correct: 1 },
+        { q: "By what time should food orders be placed?", options: ["8:00", "8:30", "8:45", "9:15"], correct: 2 },
+        { q: "Until what time will the bar stay open?", options: ["9:00", "10:00", "11:00", "Midnight"], correct: 2 },
+      ],
+    },
+    writingTask: {
+      cefr: "Do'stingizga xat yozing: restoran yoki mehmonxonada bo'lgan yoqimsiz yoki qiziq bir tajriba haqida va nima bo'lganini yozing. Kamida 120 so'z, informal uslubda yozing.",
+      ielts: "Write a letter to a friend describing an experience (good or bad) you had at a restaurant or hotel. Write at least 150 words, in an informal style.",
+    },
+    speakingTask: {
+      cefr: "Yoqtirgan restoraningiz yoki taomingiz haqida gapiring — nima uchun yoqadi. Kamida 45 soniya gapiring.",
+      ielts: "Talk about a restaurant or type of food you like. Explain why you enjoy it. Speak for at least 45 seconds.",
+    },
+  },
+];
+
+/* ---------- Level helpers ---------- */
+
+const CEFR_ORDER = ["A1","A2","B1","B2","C1","C2"];
+const cefrToNum = (lvl) => { const i = CEFR_ORDER.indexOf((lvl || "B1").toUpperCase()); return i === -1 ? 3 : i + 1; };
+const numToCefr = (n) => CEFR_ORDER[Math.max(0, Math.min(5, Math.round(n) - 1))];
+const countToCefr = (count, total) => { const r = count / total; if (r >= 0.9) return "C1"; if (r >= 0.75) return "B2"; if (r >= 0.5) return "B1"; if (r >= 0.25) return "A2"; return "A1"; };
+const countToIelts = (count, total) => { const r = count / total; if (r >= 0.9) return 8.5; if (r >= 0.75) return 7; if (r >= 0.5) return 6; if (r >= 0.25) return 5; return 4; };
+const roundHalf = (n) => Math.round(n * 2) / 2;
+
+/* ---------- Claude API helpers ---------- */
+
+async function askClaudeJSON(userContent) {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1800,
+      messages: [{ role: "user", content: userContent }],
+    }),
+  });
+  const data = await response.json();
+  const text = (data.content || []).map((b) => (b.type === "text" ? b.text : "")).join("\n");
+  const cleaned = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(cleaned);
+}
+
+async function evaluateOpenResponse({ skillLabel, task, response, track }) {
+  const levelInstruction =
+    track === "ielts"
+      ? 'Use an IELTS band score for "level", formatted like "6.5".'
+      : 'Use a CEFR level for "level", formatted like "B2".';
+  const prompt = `You are a strict but fair English examiner grading a ${skillLabel} response for a language certificate exam.
+
+Task given to the student:
+"""${task}"""
+
+Student's response:
+"""${response}"""
+
+${levelInstruction}
+Respond ONLY with valid JSON, no markdown fences, no preamble, in exactly this shape:
+{"level": "...", "errors": [{"original": "...", "correction": "...", "explanation": "..."}], "recommendations": ["...", "..."], "strengths": ["..."]}
+Limit errors to at most 5 of the most important ones, and recommendations to at most 3. Write "explanation", "recommendations", and "strengths" text in Uzbek. Keep "original" and "correction" in English.`;
+  try {
+    return await askClaudeJSON(prompt);
+  } catch (e) {
+    return {
+      level: track === "ielts" ? "5.5" : "B1",
+      errors: [],
+      recommendations: ["Natijani baholashda xatolik yuz berdi, qayta urinib ko'ring."],
+      strengths: [],
+    };
+  }
+}
+
+async function generateFreshBundle(avoidTopics, track) {
+  const prompt = `Create one fresh set of English exam materials for a language test, on a topic that is NOT any of these already-used topics: ${avoidTopics.join(", ") || "none"}.
+
+Respond ONLY with valid JSON, no markdown fences, no preamble, in exactly this shape:
+{
+  "id": "short-slug",
+  "topicLabel": "Uzbek label for the topic, 2-4 words",
+  "reading": {
+    "passage": "an original ~120-150 word English passage suitable for a B1-B2 reader",
+    "questions": [
+      {"q": "...", "options": ["...","...","...","..."], "correct": 0},
+      {"q": "...", "options": ["...","...","...","..."], "correct": 0},
+      {"q": "...", "options": ["...","...","...","..."], "correct": 0},
+      {"q": "...", "options": ["...","...","...","..."], "correct": 0}
+    ]
+  },
+  "listening": {
+    "passage": "an original ~100-130 word English passage written to be read aloud (like announcements or spoken instructions), on a different everyday topic than the reading passage",
+    "questions": [
+      {"q": "...", "options": ["...","...","...","..."], "correct": 0},
+      {"q": "...", "options": ["...","...","...","..."], "correct": 0},
+      {"q": "...", "options": ["...","...","...","..."], "correct": 0},
+      {"q": "...", "options": ["...","...","...","..."], "correct": 0}
+    ]
+  },
+  "writingTask": {
+    "cefr": "an Uzbek-language instruction for an informal letter task related to the topic, at least 120 words, informal style",
+    "ielts": "an English instruction for an informal letter task related to the topic, at least 150 words, informal style"
+  },
+  "speakingTask": {
+    "cefr": "an Uzbek-language instruction for a 45-second spoken task related to the topic",
+    "ielts": "an English instruction for a 45-second spoken task related to the topic"
+  }
+}
+"correct" must be the 0-based index of the correct option. Keep passages and questions in English; keep the Uzbek fields (topicLabel, writingTask.cefr, speakingTask.cefr) in Uzbek.`;
+  return await askClaudeJSON(prompt);
+}
+
+/* ---------- Personal "used topics" storage helpers ---------- */
+
+function userKey(user) {
+  return `${(user.ism || "").trim()}_${(user.familiya || "").trim()}`.toLowerCase();
+}
+
+async function getUsedTopics(user) {
+  try {
+    const r = await window.storage.get(`used-topics:${userKey(user)}`, false);
+    if (r && r.value) return JSON.parse(r.value);
+    return [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function addUsedTopic(user, topicId) {
+  try {
+    const current = await getUsedTopics(user);
+    const updated = [...current, topicId];
+    await window.storage.set(`used-topics:${userKey(user)}`, JSON.stringify(updated), false);
+  } catch (e) {
+    /* non-fatal */
+  }
+}
+
+async function pickBundle(user, track) {
+  const used = await getUsedTopics(user);
+  const available = TOPIC_BUNDLES.filter((b) => !used.includes(b.id));
+  let bundle;
+  if (available.length > 0) {
+    bundle = available[Math.floor(Math.random() * available.length)];
+  } else {
+    try {
+      bundle = await generateFreshBundle(used, track);
+      if (!bundle.id) bundle.id = `ai-${Date.now()}`;
+    } catch (e) {
+      // API failed — fall back to the least-recently-avoided static bundle
+      bundle = TOPIC_BUNDLES[Math.floor(Math.random() * TOPIC_BUNDLES.length)];
+    }
+  }
+  await addUsedTopic(user, bundle.id);
+  return bundle;
+}
+
+/* ---------- Small shared UI pieces (module scope) ---------- */
+
+function StepDots({ steps, current }) {
+  return (
+    <div className="flex items-center justify-center gap-2 mb-8 flex-wrap px-4">
+      {steps.map((s, i) => {
+        const active = i === current;
+        const done = i < current;
+        return (
+          <div key={s} className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium" style={{ background: active ? COLORS.gold : done ? COLORS.teal : "rgba(255,255,255,0.08)", color: active || done ? COLORS.navy : "rgba(247,242,231,0.55)", fontFamily: SANS }}>
+              {s}
+            </div>
+            {i < steps.length - 1 && <div style={{ width: 14, height: 1, background: "rgba(247,242,231,0.25)" }} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Card({ children }) {
+  return (
+    <div className="w-full max-w-2xl mx-auto rounded-lg p-6 sm:p-8" style={{ background: COLORS.parchment, boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+      {children}
+    </div>
+  );
+}
+
+function PrimaryButton({ children, onClick, disabled }) {
+  return (
+    <button onClick={onClick} disabled={disabled} className="px-6 py-3 rounded font-medium transition-opacity" style={{ background: disabled ? "#B8AE95" : COLORS.navy, color: COLORS.parchment, fontFamily: SANS, opacity: disabled ? 0.7 : 1, cursor: disabled ? "not-allowed" : "pointer" }}>
+      {children}
+    </button>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="block text-xs mb-1" style={{ fontFamily: SANS, color: "#666" }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function LoadingCard({ message }) {
+  return (
+    <Card>
+      <div className="text-center py-8">
+        <div className="text-2xl mb-3" style={{ fontFamily: SERIF, color: COLORS.navy }}>
+          {message}
+        </div>
+        <div style={{ fontFamily: SANS, color: "#888", fontSize: "0.85rem" }}>
+          Bir necha soniya kuting...
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ---------- Screens ---------- */
+
+function Landing({ track, setTrack, onNext }) {
+  return (
+    <Card>
+      <div className="text-center">
+        <div className="inline-block px-3 py-1 rounded-full text-xs mb-4 tracking-wide" style={{ background: COLORS.navy, color: COLORS.goldLight, fontFamily: SANS }}>DARAJA.UZ</div>
+        <h1 className="text-3xl sm:text-4xl mb-3" style={{ fontFamily: SERIF, color: COLORS.navy }}>Ingliz tili darajangizni aniqlang</h1>
+        <p className="mb-6" style={{ fontFamily: SANS, color: "#4A4A4A" }}>
+          Milliy sertifikat yoki IELTS formatida — Reading, Listening, Writing va Speaking bo'yicha sinovdan o'ting. Har safar mavzular boshqacha bo'ladi.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+          {[{ id: "cefr", title: "Milliy sertifikat", sub: "CEFR daraja (A1–C2)" }, { id: "ielts", title: "IELTS", sub: "Band score (1.0–9.0)" }].map((t) => (
+            <button key={t.id} onClick={() => setTrack(t.id)} className="text-left p-4 rounded border-2 transition-colors" style={{ borderColor: track === t.id ? COLORS.gold : COLORS.parchmentDark, background: track === t.id ? "rgba(199,151,44,0.12)" : "white" }}>
+              <div style={{ fontFamily: SERIF, color: COLORS.navy, fontSize: "1.1rem" }}>{t.title}</div>
+              <div style={{ fontFamily: SANS, color: "#666", fontSize: "0.85rem" }}>{t.sub}</div>
+            </button>
+          ))}
+        </div>
+        <PrimaryButton disabled={!track} onClick={onNext}>Davom etish →</PrimaryButton>
+      </div>
+    </Card>
+  );
+}
+
+function Registration({ user, setUser, onNext }) {
+  const complete = user.ism && user.jinsi && user.yil && user.oy;
+  return (
+    <Card>
+      <h2 className="text-2xl mb-1" style={{ fontFamily: SERIF, color: COLORS.navy }}>Ma'lumotlaringiz</h2>
+      <p className="mb-5 text-sm" style={{ fontFamily: SANS, color: "#666" }}>Natijangiz shu ma'lumotlar bilan sertifikat ko'rinishida tayyorlanadi.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <Field label="Ism">
+          <input value={user.ism} onChange={(e) => setUser((u) => ({ ...u, ism: e.target.value }))} className="w-full p-2 rounded border" style={{ fontFamily: SANS }} />
+        </Field>
+        <Field label="Familiya (ixtiyoriy)">
+          <input value={user.familiya} onChange={(e) => setUser((u) => ({ ...u, familiya: e.target.value }))} className="w-full p-2 rounded border" style={{ fontFamily: SANS }} />
+        </Field>
+        <Field label="Jinsi">
+          <div className="flex gap-4 pt-2">
+            {["Erkak", "Ayol"].map((g) => (
+              <label key={g} className="flex items-center gap-1 text-sm" style={{ fontFamily: SANS }}>
+                <input type="radio" checked={user.jinsi === g} onChange={() => setUser((u) => ({ ...u, jinsi: g }))} />
+                {g}
+              </label>
+            ))}
+          </div>
+        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Tug'ilgan yili">
+            <select value={user.yil} onChange={(e) => setUser((u) => ({ ...u, yil: e.target.value }))} className="w-full p-2 rounded border" style={{ fontFamily: SANS }}>
+              <option value="">—</option>
+              {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </Field>
+          <Field label="Tug'ilgan oyi">
+            <select value={user.oy} onChange={(e) => setUser((u) => ({ ...u, oy: e.target.value }))} className="w-full p-2 rounded border" style={{ fontFamily: SANS }}>
+              <option value="">—</option>
+              {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </Field>
+        </div>
+      </div>
+      <PrimaryButton disabled={!complete} onClick={onNext}>Sinovni boshlash →</PrimaryButton>
+    </Card>
+  );
+}
+
+function ReadingScreen({ content, answers, setAnswers, onNext }) {
+  return (
+    <Card>
+      <div className="text-xs mb-2" style={{ fontFamily: SANS, color: COLORS.teal }}>Mavzu: {content.topicLabel}</div>
+      <h2 className="text-2xl mb-3" style={{ fontFamily: SERIF, color: COLORS.navy }}>Reading</h2>
+      <div className="p-4 rounded mb-4 text-sm leading-relaxed" style={{ background: "white", fontFamily: SANS, color: "#333" }}>{content.reading.passage}</div>
+      {content.reading.questions.map((q, i) => (
+        <div key={i} className="mb-4">
+          <div className="text-sm mb-2" style={{ fontFamily: SANS, color: COLORS.navy }}>{i + 1}. {q.q}</div>
+          {q.options.map((opt, oi) => (
+            <label key={oi} className="flex items-center gap-2 text-sm mb-1" style={{ fontFamily: SANS, color: "#444" }}>
+              <input type="radio" checked={answers[i] === oi} onChange={() => setAnswers((a) => ({ ...a, [i]: oi }))} />
+              {opt}
+            </label>
+          ))}
+        </div>
+      ))}
+      <PrimaryButton disabled={Object.keys(answers).length < content.reading.questions.length} onClick={onNext}>Keyingisi: Listening →</PrimaryButton>
+    </Card>
+  );
+}
+
+function ListeningScreen({ content, answers, setAnswers, onPlay, ttsError, onNext }) {
+  const [showText, setShowText] = useState(false);
+  return (
+    <Card>
+      <h2 className="text-2xl mb-3" style={{ fontFamily: SERIF, color: COLORS.navy }}>Listening</h2>
+      <button onClick={onPlay} className="mb-3 px-4 py-2 rounded text-sm" style={{ background: COLORS.teal, color: "white", fontFamily: SANS }}>🔊 Matnni tinglash</button>
+      <p className="mb-3 text-xs" style={{ fontFamily: SANS, color: "#888" }}>Kerak bo'lsa tugmani qayta bosib qayta tinglashingiz mumkin.</p>
+      {ttsError && (
+        <div className="p-3 rounded text-sm mb-3" style={{ background: "#F6E3DE", color: COLORS.red, fontFamily: SANS }}>
+          {ttsError}
+        </div>
+      )}
+      {ttsError && !showText && (
+        <button onClick={() => setShowText(true)} className="mb-4 px-4 py-2 rounded text-sm" style={{ background: COLORS.navy, color: "white", fontFamily: SANS }}>
+          👁 Matnni ko'rsatish
+        </button>
+      )}
+      {showText && (
+        <div className="p-4 rounded mb-4 text-sm leading-relaxed" style={{ background: "white", fontFamily: SANS, color: "#333" }}>
+          {content.listening.passage}
+        </div>
+      )}
+      {content.listening.questions.map((q, i) => (
+        <div key={i} className="mb-4">
+          <div className="text-sm mb-2" style={{ fontFamily: SANS, color: COLORS.navy }}>{i + 1}. {q.q}</div>
+          {q.options.map((opt, oi) => (
+            <label key={oi} className="flex items-center gap-2 text-sm mb-1" style={{ fontFamily: SANS, color: "#444" }}>
+              <input type="radio" checked={answers[i] === oi} onChange={() => setAnswers((a) => ({ ...a, [i]: oi }))} />
+              {opt}
+            </label>
+          ))}
+        </div>
+      ))}
+      <PrimaryButton disabled={Object.keys(answers).length < content.listening.questions.length} onClick={onNext}>Keyingisi: Writing →</PrimaryButton>
+    </Card>
+  );
+}
+
+function WritingScreen({ track, content, text, setText, evaluating, onSubmit }) {
+  return (
+    <Card>
+      <div className="text-xs mb-2" style={{ fontFamily: SANS, color: COLORS.teal }}>Mavzu: {content.topicLabel}</div>
+      <h2 className="text-2xl mb-3" style={{ fontFamily: SERIF, color: COLORS.navy }}>Writing</h2>
+      <div className="p-4 rounded mb-4 text-sm leading-relaxed" style={{ background: "white", fontFamily: SANS, color: "#333" }}>{content.writingTask[track]}</div>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={10} className="w-full p-3 rounded border mb-2" style={{ fontFamily: SANS }} placeholder="Javobingizni shu yerga yozing..." />
+      <div className="text-xs mb-4" style={{ fontFamily: SANS, color: "#888" }}>So'zlar soni: {text.trim() ? text.trim().split(/\s+/).length : 0}</div>
+      <PrimaryButton disabled={text.trim().length < 20 || evaluating} onClick={onSubmit}>{evaluating ? "Tekshirilmoqda..." : "Tekshirish va davom etish →"}</PrimaryButton>
+    </Card>
+  );
+}
+
+function SpeakingScreen({ track, content, speechSupported, isRecording, onStartRecording, onStopRecording, micError, text, setText, evaluating, onSubmit }) {
+  return (
+    <Card>
+      <h2 className="text-2xl mb-3" style={{ fontFamily: SERIF, color: COLORS.navy }}>Speaking</h2>
+      <div className="p-4 rounded mb-4 text-sm leading-relaxed" style={{ background: "white", fontFamily: SANS, color: "#333" }}>{content.speakingTask[track]}</div>
+      {speechSupported && (
+        <div className="mb-3">
+          <button onClick={isRecording ? onStopRecording : onStartRecording} className="px-4 py-2 rounded text-sm mb-3" style={{ background: isRecording ? COLORS.red : COLORS.teal, color: "white", fontFamily: SANS }}>
+            {isRecording ? "⏹ To'xtatish" : "🎤 Gapirishni boshlash"}
+          </button>
+          <div className="p-3 rounded text-sm min-h-[80px]" style={{ background: "white", fontFamily: SANS, color: "#333" }}>
+            {text || <span style={{ color: "#aaa" }}>Gapirganingiz shu yerda matn bo'lib ko'rinadi...</span>}
+          </div>
+        </div>
+      )}
+      {micError && <div className="p-3 rounded text-sm mb-3" style={{ background: "#F6E3DE", color: COLORS.red, fontFamily: SANS }}>{micError}</div>}
+      {(!speechSupported || micError) && (
+        <div className="mb-4">
+          <p className="text-xs mb-2" style={{ fontFamily: SANS, color: "#888" }}>Javobingizni shu yerga yozing:</p>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} className="w-full p-3 rounded border" style={{ fontFamily: SANS }} placeholder="Speaking javobingizni shu yerga yozing..." />
+        </div>
+      )}
+      <PrimaryButton disabled={text.trim().length < 15 || evaluating} onClick={onSubmit}>{evaluating ? "Tekshirilmoqda..." : "Yakunlash va natijani ko'rish →"}</PrimaryButton>
+    </Card>
+  );
+}
+
+function ResultScreen({ user, track, result, writingResult, speakingResult, leaderboard, saveError, onRetake, retaking }) {
+  const allErrors = [...(writingResult?.errors || []), ...(speakingResult?.errors || [])];
+  const allRecs = [...(writingResult?.recommendations || []), ...(speakingResult?.recommendations || [])];
+  return (
+    <div className="w-full max-w-3xl mx-auto">
+      <div id="certificate" className="rounded-lg p-8 sm:p-12 mb-6" style={{ background: COLORS.parchment, border: `3px double ${COLORS.gold}`, boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+        <div className="text-center mb-6">
+          <div className="text-xs tracking-widest mb-2" style={{ fontFamily: SANS, color: COLORS.teal, letterSpacing: "0.2em" }}>DARAJA.UZ · {track === "ielts" ? "IELTS NATIJASI" : "MILLIY SERTIFIKAT · CEFR"}</div>
+          <h1 className="text-3xl mb-2" style={{ fontFamily: SERIF, color: COLORS.navy }}>Tabriklaymiz, {user.ism} {user.familiya}!</h1>
+          <p style={{ fontFamily: SANS, color: "#555" }}>Sizning ingliz tili darajangiz aniqlandi</p>
+        </div>
+        <div className="flex items-center justify-center mb-8">
+          <div className="w-32 h-32 rounded-full flex items-center justify-center" style={{ border: `4px solid ${COLORS.gold}`, background: "white" }}>
+            <div className="text-center">
+              <div style={{ fontFamily: SERIF, fontSize: "2.2rem", color: COLORS.navy }}>{result.overall}</div>
+              <div style={{ fontFamily: SANS, fontSize: "0.65rem", color: "#888" }}>{track === "ielts" ? "BAND SCORE" : "CEFR DARAJA"}</div>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+          {result.breakdown.map((b) => (
+            <div key={b.label} className="text-center p-3 rounded" style={{ background: "white" }}>
+              <div style={{ fontFamily: SANS, fontSize: "0.7rem", color: "#888" }}>{b.label}</div>
+              <div style={{ fontFamily: SERIF, fontSize: "1.3rem", color: COLORS.navy }}>{b.value}</div>
+            </div>
+          ))}
+        </div>
+        {allErrors.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-sm mb-2" style={{ fontFamily: SANS, color: COLORS.navy, fontWeight: 600 }}>Diqqat qilinadigan xatolar</h3>
+            {allErrors.slice(0, 6).map((e, i) => (
+              <div key={i} className="text-sm mb-2 p-2 rounded" style={{ background: "white" }}>
+                <div style={{ fontFamily: SANS }}><span style={{ color: COLORS.red }}>{e.original}</span>{" → "}<span style={{ color: COLORS.green }}>{e.correction}</span></div>
+                <div style={{ fontFamily: SANS, fontSize: "0.8rem", color: "#666" }}>{e.explanation}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {allRecs.length > 0 && (
+          <div className="mb-4">
+            <h3 className="text-sm mb-2" style={{ fontFamily: SANS, color: COLORS.navy, fontWeight: 600 }}>Tavsiyalar</h3>
+            <ul className="text-sm list-disc pl-5" style={{ fontFamily: SANS, color: "#444" }}>
+              {[...new Set(allRecs)].slice(0, 5).map((r, i) => <li key={i} className="mb-1">{r}</li>)}
+            </ul>
+          </div>
+        )}
+        <div className="flex justify-between items-end mt-8 pt-4" style={{ borderTop: `1px solid ${COLORS.parchmentDark}` }}>
+          <div style={{ fontFamily: SANS, fontSize: "0.7rem", color: "#888" }}>{new Date().toLocaleDateString("uz-UZ")}</div>
+          <div className="text-right">
+            <div style={{ fontFamily: SERIF, fontSize: "0.9rem", color: COLORS.navy }}>Ulug'bekov Ilyosbek</div>
+            <div style={{ fontFamily: SANS, fontSize: "0.65rem", color: "#888" }}>Daraja.uz asoschisi</div>
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-3 justify-center mb-8 flex-wrap">
+        <PrimaryButton onClick={() => window.print()}>🖨 Chop etish / saqlash</PrimaryButton>
+        <PrimaryButton onClick={onRetake} disabled={retaking}>{retaking ? "Yangi mavzu tayyorlanmoqda..." : "🔄 Qayta topshirish (yangi mavzu)"}</PrimaryButton>
+      </div>
+      {leaderboard.length > 0 && (
+        <Card>
+          <h3 className="text-sm mb-3" style={{ fontFamily: SANS, color: COLORS.navy, fontWeight: 600 }}>So'nggi natijalar (boshqa foydalanuvchilarga ko'rinadi)</h3>
+          {leaderboard.map((e, i) => (
+            <div key={i} className="flex justify-between text-sm py-1" style={{ fontFamily: SANS, color: "#444" }}>
+              <span>{e.name}</span><span style={{ color: COLORS.gold }}>{e.level}</span>
+            </div>
+          ))}
+        </Card>
+      )}
+      {saveError && <p className="text-center text-xs mt-3" style={{ fontFamily: SANS, color: "#888" }}>Natijani saqlashda muammo yuz berdi, lekin sertifikatingiz yuqorida ko'rinmoqda.</p>}
+    </div>
+  );
+}
+
+/* ---------- Main App ---------- */
+
+const STEP_LABELS = ["Ro'yxat", "Reading", "Listening", "Writing", "Speaking", "Natija"];
+
+function DarajaUz() {
+  const [step, setStep] = useState(0);
+  const [track, setTrack] = useState(null);
+  const [user, setUser] = useState({ ism: "", familiya: "", jinsi: "", yil: "", oy: "" });
+  const [content, setContent] = useState(null);
+  const [loadingContent, setLoadingContent] = useState(false);
+  const [retaking, setRetaking] = useState(false);
+
+  const [readingAnswers, setReadingAnswers] = useState({});
+  const [listeningAnswers, setListeningAnswers] = useState({});
+  const [writingText, setWritingText] = useState("");
+  const [speakingText, setSpeakingText] = useState("");
+  const [writingResult, setWritingResult] = useState(null);
+  const [speakingResult, setSpeakingResult] = useState(null);
+  const [evaluating, setEvaluating] = useState(false);
+
+  const [isRecording, setIsRecording] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(true);
+  const [micError, setMicError] = useState(null);
+  const recognitionRef = useRef(null);
+
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [saveError, setSaveError] = useState(false);
+  const [ttsError, setTtsError] = useState(null);
+
+  useEffect(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) setSpeechSupported(false);
+  }, []);
+
+  useEffect(() => {
+    if (step === 6) loadLeaderboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  async function loadLeaderboard() {
+    try {
+      const list = await window.storage.list("leaderboard:", true);
+      if (!list || !list.keys) return;
+      const entries = [];
+      for (const key of list.keys.slice(-8)) {
+        try {
+          const r = await window.storage.get(key, true);
+          if (r) entries.push(JSON.parse(r.value));
+        } catch (e) { /* skip */ }
+      }
+      entries.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      setLeaderboard(entries.slice(0, 6));
+    } catch (e) { /* ignore */ }
+  }
+
+  async function startTest() {
+    setLoadingContent(true);
+    const bundle = await pickBundle(user, track);
+    setContent(bundle);
+    setLoadingContent(false);
+    setStep(2);
+  }
+
+  function playListening() {
+    if (!content) return;
+    if (!window.speechSynthesis) {
+      setTtsError("Bu qurilma/brauzer ovoz chiqarishni (Text-to-Speech) qo'llab-quvvatlamaydi.");
+      return;
+    }
+    setTtsError(null);
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(content.listening.passage);
+    u.lang = "en-US";
+    u.rate = 0.95;
+    let started = false;
+    u.onstart = () => { started = true; };
+    u.onerror = () => {
+      setTtsError("Ovoz ijro etilmadi. Bu ko'pincha shu demo muhitida audio chiqishi bloklangani sababli bo'ladi — pastdan matnni o'qib, savollarga javob bering.");
+    };
+    try {
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      setTtsError("Ovozni ishga tushirib bo'lmadi. Pastdan matnni o'qib, savollarga javob bering.");
+      return;
+    }
+    setTimeout(() => {
+      if (!started) {
+        setTtsError("Ovoz eshitilmadimi? Bu demo muhitida audio ba'zan ishlamaydi — pastdan matnni o'qib, savollarga javob bering. Haqiqiy saytda bu odatiy brauzerda muammosiz ishlaydi.");
+      }
+    }, 1800);
+  }
+
+  function startRecording() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setSpeechSupported(false); return; }
+    setMicError(null);
+    const rec = new SR();
+    rec.lang = "en-US";
+    rec.continuous = true;
+    rec.interimResults = true;
+    let finalText = "";
+    let gotAnyResult = false;
+    rec.onresult = (event) => {
+      gotAnyResult = true;
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalText += t + " ";
+        else interim += t;
+      }
+      setSpeakingText((finalText + interim).trim());
+    };
+    rec.onerror = (event) => {
+      setIsRecording(false);
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        setMicError("Mikrofonga ruxsat berilmadi. Bu ko'pincha shu sahifa ichida (artifact muhitida) mikrofon ruxsati bloklangani sababli bo'ladi — pastdagi maydonga javobingizni yozib qo'yaverishingiz mumkin.");
+        setSpeechSupported(false);
+      } else if (event.error === "no-speech") {
+        setMicError("Ovoz eshitilmadi. Qayta urinib ko'ring yoki javobingizni yozing.");
+      } else if (event.error === "audio-capture") {
+        setMicError("Mikrofon topilmadi. Qurilmangizda mikrofon borligini tekshiring yoki yozib javob bering.");
+        setSpeechSupported(false);
+      }
+    };
+    rec.onend = () => {
+      setIsRecording(false);
+      if (!gotAnyResult && !micError) {
+        setMicError("Mikrofondan ovoz olinmadi. Brauzer sozlamalarida mikrofonga ruxsat berilganiga ishonch hosil qiling, yoki javobingizni yozing.");
+      }
+    };
+    try {
+      recognitionRef.current = rec;
+      rec.start();
+      setIsRecording(true);
+    } catch (e) {
+      setMicError("Mikrofonni ishga tushirib bo'lmadi. Javobingizni yozib qoldiring.");
+      setSpeechSupported(false);
+      setIsRecording(false);
+    }
+  }
+
+  function stopRecording() {
+    if (recognitionRef.current) recognitionRef.current.stop();
+    setIsRecording(false);
+  }
+
+  async function handleWritingSubmit() {
+    setEvaluating(true);
+    const result = await evaluateOpenResponse({ skillLabel: "Writing", task: content.writingTask[track], response: writingText, track });
+    setWritingResult(result);
+    setEvaluating(false);
+    setStep(5);
+  }
+
+  async function handleSpeakingSubmit() {
+    setEvaluating(true);
+    const result = await evaluateOpenResponse({ skillLabel: "Speaking (transcribed)", task: content.speakingTask[track], response: speakingText, track });
+    setSpeakingResult(result);
+    setEvaluating(false);
+    await finishAndSave(result);
+    setStep(6);
+  }
+
+  function readingCorrectCount() {
+    return content.reading.questions.reduce((acc, q, i) => acc + (readingAnswers[i] === q.correct ? 1 : 0), 0);
+  }
+  function listeningCorrectCount() {
+    return content.listening.questions.reduce((acc, q, i) => acc + (listeningAnswers[i] === q.correct ? 1 : 0), 0);
+  }
+
+  function computeOverall(writingLevel, speakingLevel) {
+    const rCount = readingCorrectCount();
+    const lCount = listeningCorrectCount();
+    const rTotal = content.reading.questions.length;
+    const lTotal = content.listening.questions.length;
+    if (track === "cefr") {
+      const rLevel = countToCefr(rCount, rTotal);
+      const lLevel = countToCefr(lCount, lTotal);
+      const wLevel = writingLevel || "B1";
+      const sLevel = speakingLevel || "B1";
+      const avg = (cefrToNum(rLevel) + cefrToNum(lLevel) + cefrToNum(wLevel) + cefrToNum(sLevel)) / 4;
+      return { overall: numToCefr(avg), breakdown: [{ label: "Reading", value: rLevel }, { label: "Listening", value: lLevel }, { label: "Writing", value: wLevel }, { label: "Speaking", value: sLevel }] };
+    } else {
+      const rBand = countToIelts(rCount, rTotal);
+      const lBand = countToIelts(lCount, lTotal);
+      const wBand = parseFloat(writingLevel) || 5.5;
+      const sBand = parseFloat(speakingLevel) || 5.5;
+      const avg = roundHalf((rBand + lBand + wBand + sBand) / 4);
+      return { overall: avg.toFixed(1), breakdown: [{ label: "Reading", value: rBand }, { label: "Listening", value: lBand }, { label: "Writing", value: wBand.toFixed(1) }, { label: "Speaking", value: sBand.toFixed(1) }] };
+    }
+  }
+
+  async function finishAndSave(finalSpeakingResult) {
+    try {
+      const result = computeOverall(writingResult?.level, finalSpeakingResult?.level);
+      const key = `leaderboard:${user.ism}_${user.familiya || ""}_${Date.now()}`;
+      await window.storage.set(key, JSON.stringify({ name: `${user.ism} ${user.familiya || ""}`.trim(), level: result.overall, track, ts: Date.now() }), true);
+      await window.storage.set(`result:${user.ism}_${user.familiya || ""}`, JSON.stringify({ user, track, result, ts: Date.now() }), false);
+    } catch (e) {
+      setSaveError(true);
+    }
+  }
+
+  async function handleRetake() {
+    setRetaking(true);
+    setReadingAnswers({});
+    setListeningAnswers({});
+    setWritingText("");
+    setSpeakingText("");
+    setWritingResult(null);
+    setSpeakingResult(null);
+    setMicError(null);
+    setSaveError(false);
+    const bundle = await pickBundle(user, track);
+    setContent(bundle);
+    setRetaking(false);
+    setStep(2);
+  }
+
+  return (
+    <div className="min-h-screen w-full py-10 px-4" style={{ background: `linear-gradient(180deg, ${COLORS.navy}, ${COLORS.navyLight})` }}>
+      <div
+        style={{
+          position: "fixed",
+          bottom: 10,
+          right: 10,
+          zIndex: 50,
+          background: COLORS.gold,
+          color: COLORS.navy,
+          fontFamily: SERIF,
+          fontSize: "0.7rem",
+          padding: "4px 10px",
+          borderRadius: 999,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+          letterSpacing: "0.02em",
+        }}
+      >
+        by Ulug'bekov Ilyosbek
+      </div>
+      {step >= 1 && step <= 6 && <StepDots steps={STEP_LABELS} current={step - 1} />}
+
+      {step === 0 && <Landing track={track} setTrack={setTrack} onNext={() => setStep(1)} />}
+
+      {step === 1 && !loadingContent && <Registration user={user} setUser={setUser} onNext={startTest} />}
+      {step === 1 && loadingContent && <LoadingCard message="Sizga mos mavzu tayyorlanmoqda..." />}
+
+      {step === 2 && content && <ReadingScreen content={content} answers={readingAnswers} setAnswers={setReadingAnswers} onNext={() => setStep(3)} />}
+
+      {step === 3 && content && <ListeningScreen content={content} answers={listeningAnswers} setAnswers={setListeningAnswers} onPlay={playListening} ttsError={ttsError} onNext={() => setStep(4)} />}
+
+      {step === 4 && content && <WritingScreen track={track} content={content} text={writingText} setText={setWritingText} evaluating={evaluating} onSubmit={handleWritingSubmit} />}
+
+      {step === 5 && content && (
+        <SpeakingScreen
+          track={track}
+          content={content}
+          speechSupported={speechSupported}
+          isRecording={isRecording}
+          onStartRecording={startRecording}
+          onStopRecording={stopRecording}
+          micError={micError}
+          text={speakingText}
+          setText={setSpeakingText}
+          evaluating={evaluating}
+          onSubmit={handleSpeakingSubmit}
+        />
+      )}
+
+      {step === 6 && content && (
+        <ResultScreen
+          user={user}
+          track={track}
+          result={computeOverall(writingResult?.level, speakingResult?.level)}
+          writingResult={writingResult}
+          speakingResult={speakingResult}
+          leaderboard={leaderboard}
+          saveError={saveError}
+          onRetake={handleRetake}
+          retaking={retaking}
+        />
+      )}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<DarajaUz />);
+</script>
+</body>
+</html>
